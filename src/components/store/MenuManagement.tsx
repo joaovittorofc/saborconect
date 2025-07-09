@@ -1,111 +1,79 @@
-import { useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Plus } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
-import { supabase } from "@/integrations/supabase/client"
-import type { Category, MenuItem, CustomOption } from "./StoreBuilder"
+import { useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Plus } from "lucide-react";
+import { Category, MenuItem, CustomOption } from "@/types/store";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface MenuManagementProps {
-  storeId: string
-  categories: Category[]
-  menuItems: MenuItem[]
-  customOptions: CustomOption[]
-  onCategoriesChange: (categories: Category[]) => void
-  onMenuItemsChange: (items: MenuItem[]) => void
-  onCustomOptionsChange: (options: CustomOption[]) => void
+  storeId: string;
+  categories: Category[];
+  menuItems: MenuItem[];
+  customOptions: CustomOption[];
+  onCategoriesChange: (categories: Category[]) => void;
+  onMenuItemsChange: (items: MenuItem[]) => void;
+  onCustomOptionsChange: (options: CustomOption[]) => void;
 }
 
-export function MenuManagement({
-  storeId,
-  categories,
-  menuItems,
-  customOptions,
-  onCategoriesChange,
-  onMenuItemsChange,
-  onCustomOptionsChange
+export function MenuManagement({ 
+  storeId, 
+  categories, 
+  onCategoriesChange, 
+  menuItems, 
+  onMenuItemsChange 
 }: MenuManagementProps) {
-  const { toast } = useToast()
-  const [loadingCategory, setLoadingCategory] = useState(false)
-  const [loadingItem, setLoadingItem] = useState(false)
+  const { toast } = useToast();
+  const [newCategoryName, setNewCategoryName] = useState("");
 
   const handleAddCategory = async () => {
-    try {
-      setLoadingCategory(true)
-
-      const { data, error } = await supabase.from("categories").insert({
-        name: "New Category",
-        display_order: categories.length,
-        store_id: storeId
-      }).select().single()
-
-      if (error) throw error
-
-      onCategoriesChange([...categories, data])
-      toast({ title: "Category created!" })
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to create category",
-        variant: "destructive"
-      })
-    } finally {
-      setLoadingCategory(false)
-    }
-  }
-
-  const handleAddMenuItem = async () => {
-    if (categories.length === 0) {
-      toast({
-        title: "No categories found",
-        description: "You must create a category first",
-        variant: "destructive"
-      })
-      return
+    if (!newCategoryName.trim()) {
+      toast({ title: "Error", description: "Category name cannot be empty", variant: "destructive" });
+      return;
     }
 
     try {
-      setLoadingItem(true)
+      const { data, error } = await supabase
+        .from("categories")
+        .insert({
+          name: newCategoryName,
+          store_id: storeId,
+          display_order: categories.length
+        })
+        .select()
+        .single();
 
-      const { data, error } = await supabase.from("menu_items").insert({
-        name: "New Item",
-        description: "",
-        price: 0,
-        image_url: "",
-        is_customizable: false,
-        display_order: menuItems.length,
-        category_id: categories[0].id
-      }).select().single()
+      if (error) throw error;
 
-      if (error) throw error
-
-      onMenuItemsChange([...menuItems, data])
-      toast({ title: "Item created!" })
+      onCategoriesChange([...categories, data]);
+      setNewCategoryName("");
+      toast({ title: "Category added successfully!" });
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to create item",
-        variant: "destructive"
-      })
-    } finally {
-      setLoadingItem(false)
+      console.error("Add Category Error:", error);
+      toast({ title: "Error", description: "Failed to create category", variant: "destructive" });
     }
-  }
+  };
 
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            Categories
-            <Button size="sm" className="btn-brazil" onClick={handleAddCategory} disabled={loadingCategory}>
-              <Plus className="w-4 h-4 mr-2" />
-              Add Category
-            </Button>
-          </CardTitle>
+          <CardTitle>Categories</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          <div className="flex gap-2">
+            <Input
+              placeholder="New category name"
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+            />
+            <Button onClick={handleAddCategory} className="btn-brazil">
+              <Plus className="w-4 h-4 mr-2" /> Add Category
+            </Button>
+          </div>
+
           {categories.length === 0 ? (
             <p className="text-muted-foreground text-center py-8">
               No categories yet. Add your first category to get started.
@@ -122,37 +90,7 @@ export function MenuManagement({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            Menu Items
-            <Button size="sm" className="btn-brazil" onClick={handleAddMenuItem} disabled={loadingItem}>
-              <Plus className="w-4 h-4 mr-2" />
-              Add Item
-            </Button>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {menuItems.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">
-              No menu items yet. Add categories first, then add your delicious items.
-            </p>
-          ) : (
-            <div className="space-y-4">
-              {menuItems.map((item) => (
-                <div key={item.id} className="p-4 border rounded-lg">
-                  <h4 className="font-medium">{item.name}</h4>
-                  <p className="text-sm text-muted-foreground">{item.description}</p>
-                  <p className="font-semibold text-primary">${item.price}</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Menu Items Card será refatorado depois */}
     </div>
-  )
+  );
 }
-// MenuManagement allows store owners to manage menu categories and items.
-// It provides UI to add categories/items and updates data via Supabase.
-// The component displays the current categories and menu items, and notifies users of actions.

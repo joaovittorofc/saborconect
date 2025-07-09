@@ -1,7 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { StoreConfig, Category, MenuItem } from "./StoreBuilder";
+import { StoreConfig, Category, MenuItem } from "@/types/store";
 
 interface LiveStorePreviewProps {
   storeConfig: StoreConfig;

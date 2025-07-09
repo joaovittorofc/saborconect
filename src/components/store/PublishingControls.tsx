@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle, Globe, Copy } from "lucide-react";
-import { StoreConfig, Category, MenuItem } from "./StoreBuilder";
+import { StoreConfig, Category, MenuItem } from "@/types/store";
 import { useToast } from "@/hooks/use-toast";
 
 interface PublishingControlsProps {
