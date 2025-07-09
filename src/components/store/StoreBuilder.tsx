@@ -1,147 +1,229 @@
+import { useEffect, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { StoreConfiguration } from "./StoreConfiguration";
+import { MenuManagement } from "./MenuManagement";
+import { LiveStorePreview } from "./LiveStorePreview";
+import { PublishingControls } from "./PublishingControls";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { Loader2 } from "lucide-react";
 import {
   StoreConfig,
   Category,
   MenuItem,
   CustomOption
 } from "@/types/store";
-import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Plus } from "lucide-react";
 
-interface MenuManagementProps {
-  storeId: string;
-  categories: Category[];
-  menuItems: MenuItem[];
-  customOptions: CustomOption[];
-  onCategoriesChange: (categories: Category[]) => void;
-  onMenuItemsChange: (items: MenuItem[]) => void;
-  onCustomOptionsChange: (options: CustomOption[]) => void;
-}
+function StoreBuilder() {
+  const [isLoading, setIsLoading] = useState(true);
+  const [storeConfig, setStoreConfig] = useState<StoreConfig>({
+    name: "",
+    description: "",
+    logo_url: "",
+    banner_url: "",
+    primary_color: "#22c55e",
+    button_color: "#eab308",
+    language: "en",
+    gamified_ordering: false,
+    is_published: false,
+    store_url: ""
+  });
 
-export function MenuManagement({ 
-  storeId, 
-  categories, 
-  menuItems, 
-  customOptions, 
-  onCategoriesChange, 
-  onMenuItemsChange, 
-  onCustomOptionsChange 
-}: MenuManagementProps) {
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [customOptions, setCustomOptions] = useState<CustomOption[]>([]);
   const { toast } = useToast();
-  const [newCategoryName, setNewCategoryName] = useState("");
 
- const handleAddCategory = async () => {
-  if (!newCategoryName || !storeId) {
-    toast({
-      title: "Error",
-      description: "Category name and store ID are required",
-      variant: "destructive"
-    });
-    return;
+  useEffect(() => {
+    loadStoreData();
+  }, []);
+
+  const loadStoreData = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: stores } = await supabase
+        .from("stores")
+        .select("*")
+        .eq("user_id", user.id)
+        .limit(1);
+
+      if (stores && stores.length > 0) {
+        const store = stores[0];
+        setStoreConfig(store);
+
+        const { data: categoriesData } = await supabase
+          .from("categories")
+          .select("*")
+          .eq("store_id", store.id)
+          .order("display_order");
+
+        if (categoriesData) setCategories(categoriesData);
+
+        const { data: menuItemsData } = await supabase
+          .from("menu_items")
+          .select("*")
+          .in("category_id", categoriesData?.map(c => c.id) || [])
+          .order("display_order");
+
+        if (menuItemsData) setMenuItems(menuItemsData);
+
+        const { data: customOptionsData } = await supabase
+          .from("custom_options")
+          .select("*")
+          .in("item_id", menuItemsData?.map(i => i.id) || []);
+
+        if (customOptionsData) setCustomOptions(customOptionsData);
+      }
+    } catch (error) {
+      console.error("Error loading store data:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load store data",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleStoreConfigChange = async (field: keyof StoreConfig, value: any) => {
+    const updatedConfig = { ...storeConfig, [field]: value };
+    setStoreConfig(updatedConfig);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      if (storeConfig.id) {
+        await supabase
+          .from("stores")
+          .update({ [field]: value })
+          .eq("id", storeConfig.id);
+      } else {
+        const { data: newStore } = await supabase
+          .from("stores")
+          .insert({ user_id: user.id, ...updatedConfig })
+          .select()
+          .single();
+
+        if (newStore) setStoreConfig(newStore);
+      }
+    } catch (error) {
+      console.error("Error saving store config:", error);
+    }
+  };
+
+  const handlePublish = async () => {
+    try {
+      if (!storeConfig.id) {
+        toast({
+          title: "Error",
+          description: "Please save your store configuration first",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      await supabase
+        .from("stores")
+        .update({ is_published: true })
+        .eq("id", storeConfig.id);
+
+      setStoreConfig(prev => ({ ...prev, is_published: true }));
+
+      toast({
+        title: "Store Published!",
+        description: "Your store is now live and accessible to customers"
+      });
+    } catch (error) {
+      console.error("Error publishing store:", error);
+      toast({
+        title: "Error",
+        description: "Failed to publish store",
+        variant: "destructive"
+      });
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
   }
-
-  try {
-    const { data: newCategory, error } = await supabase
-      .from("categories")
-      .insert({
-        name: newCategoryName,
-        store_id: storeId,
-        display_order: categories.length
-      })
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    onCategoriesChange([...categories, newCategory]);
-    setNewCategoryName("");
-
-    toast({
-      title: "Success",
-      description: "Category created successfully"
-    });
-  } catch (error) {
-    console.error("Add Category Error:", error);
-    toast({
-      title: "Error",
-      description: "Failed to create category",
-      variant: "destructive"
-    });
-  }
-};
-
-      // The following code is already present above, so you can remove this duplicate block.
-      // The logic for adding a category and handling errors is already implemented in handleAddCategory.
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            Categories
-            <Button size="sm" className="btn-brazil" onClick={handleAddCategory}>
-              <Plus className="w-4 h-4 mr-2" />
-              Add Category
-            </Button>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-4 mb-4">
-            <Input
-              value={newCategoryName}
-              onChange={(e) => setNewCategoryName(e.target.value)}
-              placeholder="Category name"
-            />
-          </div>
+    <div className="container mx-auto p-6 max-w-7xl">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gradient-brazil mb-2">Store Builder</h1>
+        <p className="text-muted-foreground">
+          Create and customize your Brazilian food ordering experience
+        </p>
+      </div>
 
-          {categories.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">
-              No categories yet. Add your first category to get started.
-            </p>
-          ) : (
-            <div className="space-y-4">
-              {categories.map((category) => (
-                <div key={category.id} className="flex items-center gap-4 p-4 border rounded-lg">
-                  <Input value={category.name} readOnly />
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
+          <Tabs defaultValue="store" className="w-full">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="store">Store Setup</TabsTrigger>
+              <TabsTrigger value="menu">Menu & Products</TabsTrigger>
+              <TabsTrigger value="publish">Publish</TabsTrigger>
+            </TabsList>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            Menu Items
-            <Button size="sm" className="btn-brazil">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Item
-            </Button>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {menuItems.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8">
-              No menu items yet. Add categories first, then add your delicious items.
-            </p>
-          ) : (
-            <div className="space-y-4">
-              {menuItems.map((item) => (
-                <div key={item.id} className="p-4 border rounded-lg">
-                  <h4 className="font-medium">{item.name}</h4>
-                  <p className="text-sm text-muted-foreground">{item.description}</p>
-                  <p className="font-semibold text-primary">${item.price}</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            <TabsContent value="store" className="space-y-6">
+              <StoreConfiguration
+                storeConfig={storeConfig}
+                onStoreConfigChange={handleStoreConfigChange}
+              />
+            </TabsContent>
+
+            <TabsContent value="menu" className="space-y-6">
+              <MenuManagement
+                storeId={storeConfig.id || ""}
+                categories={categories}
+                menuItems={menuItems}
+                customOptions={customOptions}
+                onCategoriesChange={setCategories}
+                onMenuItemsChange={setMenuItems}
+                onCustomOptionsChange={setCustomOptions}
+              />
+            </TabsContent>
+
+            <TabsContent value="publish" className="space-y-6">
+              <PublishingControls
+                storeConfig={storeConfig}
+                onPublish={handlePublish}
+                categories={categories}
+                menuItems={menuItems}
+              />
+            </TabsContent>
+          </Tabs>
+        </div>
+
+        <div className="lg:col-span-1">
+          <Card className="sticky top-6">
+            <CardHeader>
+              <CardTitle className="text-lg">Live Preview</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                See how your store will look to customers
+              </p>
+            </CardHeader>
+            <CardContent>
+              <LiveStorePreview
+                storeConfig={storeConfig}
+                categories={categories}
+                menuItems={menuItems}
+              />
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }
+
+export default StoreBuilder;
